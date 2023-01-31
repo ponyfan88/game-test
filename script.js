@@ -4,9 +4,9 @@ var canvas = document.getElementById("mycanvas");
 var ctx = canvas.getContext("2d");
 
 const TOTAL_IMAGES = 1;
-const RES = 1;
+const RES = 2;
 const PLAYER_WIDTH = 4;
-const PLAYER_SPEED = 2;
+const PLAYER_SPEED = 6;
 
 var mouseX = 0;
 var mouseY = 0;
@@ -68,8 +68,8 @@ function game() {
     canvas.width = window.innerWidth / RES;
     canvas.height = window.innerHeight / RES;
 
-    var dx = mouseX - canvas.width / 2 - playerX
-    var dy = mouseY - canvas.height / 2 - playerY
+    var dx = (mouseX - window.innerWidth / 2 - playerX * RES) / RES
+    var dy = (mouseY - window.innerHeight / 2 - playerY * RES) / RES
 
     
 
@@ -99,8 +99,8 @@ function game() {
 
     playerMoveAmmount /= 1.1;
 
-    playerX += PLAYER_SPEED * Math.cos(playerMoveAngle) * playerMoveAmmount;
-    playerY += PLAYER_SPEED * Math.sin(playerMoveAngle) * playerMoveAmmount;
+    playerX += PLAYER_SPEED / RES * Math.cos(playerMoveAngle) * playerMoveAmmount;
+    playerY += PLAYER_SPEED / RES * Math.sin(playerMoveAngle) * playerMoveAmmount;
 
     x++;
 
