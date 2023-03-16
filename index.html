@@ -1,20 +1,652 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="./style.css">
-    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+﻿<link rel="icon" href="./favicon.ico" type="image/x-icon" />
+<title>&lrm;</title>
+<script>
+    window.addEventListener("load", function () {
+        const TOTAL_IMAGES = 1;
 
-    <title>
-        hi hungry
-    </title>
-  </head>
-  <body>
-      <canvas id="mycanvas"></canvas>
+        const RES = 2;
 
-      <p id="display"></p>
+        const DEG_TO_RAD = Math.PI / 180;
 
-      <script src="script.js"></script>
-  </body>
-</html>
+        const PLAYER_WIDTH = 4;
+        const PLAYER_WIDTH_HALF = PLAYER_WIDTH / 2;
+        const PLAYER_SPEED = 6;
+        const PLAYER_SPEED_RES_CORRECTED = PLAYER_SPEED / RES;
+
+        const CROSSHAIR_WIDTH = 4;
+        const CROSSHAIR_WIDTH_HALF = CROSSHAIR_WIDTH / 2;
+
+        const PROJECTILE_SPEED = 6;
+        const PROJECTILE_WIDTH = 4;
+        const PROJECTILE_WIDTH_HALF = PROJECTILE_WIDTH / 2;
+        const PROJECTILE_SPAWN_OFFSET = 13;
+
+        const ENEMY_WIDTH = 4;
+        const ENEMY_WIDTH_HALF = ENEMY_WIDTH / 2;
+        const ENEMY_SPEED = 1;
+        const ENEMY_SPAWN_RANDOM_AMMOUNT = 25;
+        const ENEMY_SPAWN_DISTANCE_MULTIPLIER = 1.5;
+
+        const WEAPON_PROJECTILE_MULTIPLE_OFFSET = 15;
+        const WEAPON_PROJECTILE_MULTIPLE_OFFSET_RADIANS =
+            WEAPON_PROJECTILE_MULTIPLE_OFFSET * DEG_TO_RAD;
+
+        const THREE_HUNDRED_AND_SIXTY_RADIANS = Math.PI * 4;
+
+        let C_WIDTH_HALF;
+        let C_HEIGHT_HALF;
+
+        let C_WIDTH_RES_CORRECTED;
+        let C_HEIGHT_RES_CORRECTED;
+
+        const weapons = [
+            {
+                // SQUIRT GUN
+                flip: true,
+                fireAmmount: 1, // number of times to fire
+                image: null, // image (set to null, please)
+                width: 25, // image width
+                height: 25, // image height
+                delay: 10, // delay (in frames) between shots
+            },
+            {
+                // NERF SG
+                flip: true,
+                fireAmmount: 3,
+                image: null,
+                width: 50,
+                height: 25,
+                delay: 30,
+            },
+        ];
+
+        //#region html body full width
+
+        let html = document.querySelector("html");
+
+        function big(element) {
+            element.style.width = "100vw";
+            element.style.height = "100vh";
+            element.style.margin = "0";
+        }
+
+        big(html); // take up screen
+
+        let body = document.querySelector("body");
+
+        big(body); // take up screen
+
+        //#endregion html body full width
+
+        //#region canvas setup
+
+        let c = document.createElement("canvas");
+        let ctx = c.getContext("2d");
+
+        c.width = window.innerWidth / RES;
+        c.height = window.innerHeight / RES;
+
+        big(c); // take up screen
+
+        window.addEventListener("resize", function () {
+            recalcHalf();
+        });
+
+        function recalcHalf() {
+            C_WIDTH_HALF = c.width / 2;
+            C_HEIGHT_HALF = c.height / 2;
+
+            C_WIDTH_RES_CORRECTED = c.width * RES;
+            C_HEIGHT_RES_CORRECTED = c.height * RES;
+
+            C_WIDTH_ENEMY_SPAWN_DISTANCE =
+                C_WIDTH_HALF * ENEMY_SPAWN_DISTANCE_MULTIPLIER;
+        }
+
+        //#endregion canvas setup
+
+        document.querySelector("body").appendChild(c);
+
+        c.style.imageRendering = "pixelated";
+
+        //#region game
+
+        //#region variables
+
+        let loaded = 0;
+
+        let weaponIndex = 0;
+
+        let enemyCount = 10;
+
+        let keyFire = false;
+
+        let mouseLocked = false;
+
+        let mouseX = 0;
+        let mouseY = 0;
+
+        let playerX = window.innerWidth / RES / 2;
+        let playerY = window.innerHeight / RES / 2;
+        let playerMoveX = 0;
+        let playerMoveY = 0;
+        let playerMovementX = 0;
+        let playerMovementY = 0;
+
+        let projectiles = []; // dont worry its water i SWEAR not bullets
+
+        let deleteProjectiles = [];
+
+        let enemies = [];
+
+        let deleteEnemies = [];
+
+        let x = 0;
+
+        let playerAngle = 0;
+
+        let tickX = 0;
+        let tickY = 0;
+
+        let keyW = false;
+        let keyA = false;
+        let keyS = false;
+        let keyD = false;
+
+        let playerMoveAmmount = 0;
+
+        let delay = 0;
+
+        let waterPistolImage;
+        let nerfSGImage;
+
+        let projectile;
+        let enemy;
+        let enemyAngle;
+
+        let key;
+        let weapon;
+        let odd;
+        let offset;
+
+        let dx;
+        let dy;
+
+        let enemyIsDead;
+
+        recalcHalf();
+
+        //#endregion variables
+
+        //#region load images
+
+        waterPistolImage = new Image(0, 0);
+        waterPistolImage.src = "ASSETS/pistol_emojidex.png";
+        waterPistolImage.onload = markAsLoaded; // Draw when image has loaded
+
+        document.body.append(waterPistolImage);
+
+        weapons[0].image = waterPistolImage;
+
+        nerfSGImage = new Image(0, 0);
+        nerfSGImage.src = "ASSETS/nerf_sg.png";
+        nerfSGImage.onload = markAsLoaded; // Draw when image has loaded
+
+        document.body.append(nerfSGImage);
+
+        weapons[1].image = nerfSGImage;
+
+        function markAsLoaded() {
+            loaded++;
+        }
+
+        //#endregion load images
+
+        //#region load loop
+
+        function load() {
+            ctx.fillRect(0, 0, c.width, c.height);
+
+            if (loaded >= TOTAL_IMAGES) {
+                spawn();
+                window.requestAnimationFrame(game);
+            } else {
+                window.requestAnimationFrame(load);
+            }
+        }
+
+        window.requestAnimationFrame(load);
+
+        //#endregion load loop
+
+        //#region game loop
+
+        function game() {
+            delay++;
+
+            // set the canvas to the proper size (NEEDS to be done in this scope)
+            c.width = window.innerWidth / RES;
+            c.height = window.innerHeight / RES;
+
+            recalcHalf();
+
+            //#region set variables
+
+            weapon = weapons[weaponIndex];
+
+            //#endregion set variables
+
+            if (keyFire) {
+                if (delay >= weapon.delay) {
+                    fire();
+                }
+            }
+
+            //#region player angle and movement
+            dx = (mouseX - playerX * RES) / RES;
+            dy = (mouseY - playerY * RES) / RES;
+
+            playerAngle = Math.atan2(dy, dx);
+
+            if (keyD == true) {
+                playerMoveX++;
+                playerMoveAmmount = 1;
+            }
+            if (keyS == true) {
+                playerMoveY++;
+                playerMoveAmmount = 1;
+            }
+            if (keyA == true) {
+                playerMoveX--;
+                playerMoveAmmount = 1;
+            }
+            if (keyW == true) {
+                playerMoveY--;
+                playerMoveAmmount = 1;
+            }
+
+            playerMoveAngle = Math.atan2(playerMoveY, playerMoveX);
+
+            playerMoveX /= 1.1;
+            playerMoveY /= 1.1;
+
+            playerMoveAmmount /= 1.1;
+
+            playerX +=
+                PLAYER_SPEED_RES_CORRECTED *
+                Math.cos(playerMoveAngle) *
+                playerMoveAmmount;
+            playerY +=
+                PLAYER_SPEED_RES_CORRECTED *
+                Math.sin(playerMoveAngle) *
+                playerMoveAmmount;
+
+            //#endregion player angle and movement
+
+            //#region canvas rendering
+
+            // clear our canvas
+            ctx.clearRect(0, 0, c.width, c.height);
+
+            //#region projectiles
+
+            ctx.fillStyle = "dodgerBlue";
+
+            for (let i = 0; i < projectiles.length; i++) {
+                projectile = projectiles[i];
+
+                if (
+                    projectile.x < 0 ||
+                    projectile.x > c.width ||
+                    projectile.y < 0 ||
+                    projectile.y > c.height
+                ) {
+                    deleteProjectiles.push(i);
+                    continue;
+                }
+
+                ctx.fillRect(
+                    Math.round(projectile.x - PROJECTILE_WIDTH_HALF),
+                    Math.round(projectile.y - PROJECTILE_WIDTH_HALF),
+                    PROJECTILE_WIDTH,
+                    PROJECTILE_WIDTH
+                );
+
+                projectile.x += projectile.xs;
+                projectile.y += projectile.ys;
+            }
+
+            ctx.fillStyle = "red";
+
+            for (let i = 0; i < enemies.length; i++) {
+                enemyIsDead = false;
+
+                enemy = enemies[i];
+
+                ctx.fillRect(
+                    Math.round(enemy.x - ENEMY_WIDTH_HALF),
+                    Math.round(enemy.y - ENEMY_WIDTH_HALF),
+                    ENEMY_WIDTH,
+                    ENEMY_WIDTH
+                );
+
+                enemyAngle = Math.atan2(playerY - enemy.y, playerX - enemy.x);
+
+                enemy.x +=
+                    Math.cos(enemyAngle) * ENEMY_SPEED +
+                    (Math.random() * 2 - 1);
+                enemy.y +=
+                    Math.sin(enemyAngle) * ENEMY_SPEED +
+                    (Math.random() * 2 - 1);
+
+                for (let i2 = 0; i2 < projectiles.length; i2++) {
+                    projectile = projectiles[i2];
+
+                    if (
+                        projectile.x > 0 != enemy.x > 0 ||
+                        projectile.y > 0 != enemy.y > 0
+                    ) {
+                        continue;
+                    }
+
+                    if (
+                        PROJECTILE_WIDTH >
+                        Math.sqrt(
+                            (enemy.x - projectile.x) ** 2 +
+                                (enemy.y - projectile.y) ** 2
+                        )
+                    ) {
+                        deleteEnemies.push(i);
+
+                        enemyIsDead = true;
+
+                        if (!deleteProjectiles.includes(i2)) {
+                            deleteProjectiles.push(i2);
+                        }
+
+                        break;
+                    }
+                }
+
+                if (
+                    !enemyIsDead &&
+                    PLAYER_WIDTH >
+                        (enemy.x - playerX) ** 2 + (enemy.y - playerY) ** 2
+                ) {
+                    setup();
+                    window.requestAnimationFrame(game);
+                    return;
+                }
+            }
+
+            for (let i = 0; i < deleteProjectiles.length; i++) {
+                projectiles.splice(deleteProjectiles[i] - i, 1);
+            }
+
+            deleteProjectiles = [];
+
+            for (let i = 0; i < deleteEnemies.length; i++) {
+                enemies.splice(deleteEnemies[i] - i, 1);
+            }
+
+            deleteEnemies = [];
+
+            //#endregion projectiles
+
+            // save our canvas (we've just done all our "normal" canvas rendering)
+            ctx.save();
+
+            // move our drawing to where our player is
+            ctx.translate(playerX, playerY);
+            if (weapon.flip) {
+                // rotate our canvas by 180
+                ctx.rotate(Math.PI);
+            }
+            // rotate our canvas by our player angle
+            ctx.rotate(playerAngle);
+
+            // if our mouse is to the right of our player, flip our canvas so that our squirt gun renders correctly
+            if (dx > 0) {
+                ctx.scale(1, -1);
+            }
+
+            // draw the squirt gun
+            ctx.drawImage(
+                weapon.image,
+                (-1 * weapon.width) / RES,
+                weapon.height / -2 / RES,
+                weapon.width / RES,
+                weapon.height / RES
+            );
+
+            // restore our canvas to how it previously was
+            ctx.restore();
+
+            ctx.fillStyle = "black";
+
+            // draw the player
+            ctx.fillRect(
+                Math.round(playerX - PLAYER_WIDTH_HALF),
+                Math.round(playerY - PLAYER_WIDTH_HALF),
+                PLAYER_WIDTH,
+                PLAYER_WIDTH
+            );
+
+            ctx.fillStyle = "rgb(0, 255, 0)";
+
+            ctx.fillRect(
+                Math.round(mouseX / RES - CROSSHAIR_WIDTH_HALF),
+                Math.round(mouseY / RES - CROSSHAIR_WIDTH_HALF),
+                CROSSHAIR_WIDTH,
+                CROSSHAIR_WIDTH
+            );
+
+            //#endregion canvas rendering
+
+            if (enemies.length == 0) {
+                enemyCount += enemyCount;
+                spawn();
+            }
+
+            window.requestAnimationFrame(game);
+        }
+
+        //#endregion game loop
+
+        document.addEventListener("mousemove", function (event) {
+            if (mouseLocked) {
+                mouseX += event.movementX;
+                mouseY += event.movementY;
+
+                if (mouseY > C_HEIGHT_RES_CORRECTED) {
+                    mouseY = C_HEIGHT_RES_CORRECTED;
+                } else if (mouseY < 0) {
+                    mouseY = 0;
+                }
+
+                if (mouseX > C_WIDTH_RES_CORRECTED) {
+                    mouseX = C_WIDTH_RES_CORRECTED;
+                } else if (mouseX < 0) {
+                    mouseX = 0;
+                }
+            } else {
+                mouseX = event.pageX;
+                mouseY = event.pageY;
+            }
+        });
+
+        window.addEventListener("keydown", onKeyDown, false);
+        window.addEventListener("keyup", onKeyUp, false);
+
+        window.addEventListener("mousedown", fire, false);
+
+        function onKeyDown(event) {
+            key = event.key;
+
+            switch (key) {
+                case "d":
+                    keyD = true;
+                    break;
+                case "s":
+                    keyS = true;
+                    break;
+                case "a":
+                    keyA = true;
+                    break;
+                case "w":
+                    keyW = true;
+                    break;
+                case "r":
+                    enemies = [];
+                    break;
+                case " ":
+                    keyFire = true;
+                    break;
+                case "1":
+                    weaponIndex = 0;
+                    break;
+                case "2":
+                    weaponIndex = 1;
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            key = event.key;
+
+            switch (key) {
+                case "d":
+                    keyD = false;
+                    break;
+                case "s":
+                    keyS = false;
+                    break;
+                case "a":
+                    keyA = false;
+                    break;
+                case "w":
+                    keyW = false;
+                    break;
+                case " ":
+                    keyFire = false;
+                    break;
+            }
+        }
+
+        function fire() {
+            delay = 0;
+
+            weapon = weapons[weaponIndex];
+
+            odd = true;
+
+            if (weapon.fireAmmount % 2 == 0) {
+                odd = false;
+            }
+
+            single = false;
+
+            if (weapon.fireAmmount == 1) {
+                single = true;
+            }
+
+            offset = 0;
+
+            for (let i = 0; i < weapon.fireAmmount; i++) {
+                if (single) {
+                    offset = 0;
+                } else {
+                    if (odd) {
+                        offset =
+                            i / weapon.fireAmmount -
+                            ((weapon.fireAmmount - 1) / 2) *
+                                WEAPON_PROJECTILE_MULTIPLE_OFFSET_RADIANS;
+                    } else {
+                        offset =
+                            i / weapon.fireAmmount -
+                            (weapon.fireAmmount / 2) *
+                                WEAPON_PROJECTILE_MULTIPLE_OFFSET_RADIANS;
+                    }
+                }
+
+                projectiles.push({
+                    x:
+                        playerX +
+                        Math.cos(playerAngle + offset) *
+                            PROJECTILE_SPAWN_OFFSET,
+                    y:
+                        playerY +
+                        Math.sin(playerAngle + offset) *
+                            PROJECTILE_SPAWN_OFFSET,
+                    xs: Math.cos(playerAngle + offset) * PROJECTILE_SPEED,
+                    ys: Math.sin(playerAngle + offset) * PROJECTILE_SPEED,
+                });
+            }
+        }
+
+        function spawn() {
+            recalcHalf();
+
+            let enemyDist;
+            let enemyAngle;
+
+            for (let _ = 0; _ < enemyCount; _++) {
+                enemyDist =
+                    C_WIDTH_ENEMY_SPAWN_DISTANCE *
+                    (Math.round(Math.random()) * 2 - 1); // + or - canvas width
+
+                enemyAngle = Math.random() * THREE_HUNDRED_AND_SIXTY_RADIANS;
+
+                enemies.push({
+                    x: C_WIDTH_HALF + Math.cos(enemyAngle) * enemyDist,
+                    y: C_HEIGHT_HALF + Math.sin(enemyAngle) * enemyDist,
+                });
+            }
+        }
+
+        function setup() {
+            weaponIndex = 0;
+            enemyCount = 10;
+            keyFire = false;
+            mouseLocked = false;
+            mouseX = 0;
+            mouseY = 0;
+            playerX = window.innerWidth / RES / 2;
+            playerY = window.innerHeight / RES / 2;
+            playerMoveX = 0;
+            playerMoveY = 0;
+            playerMovementX = 0;
+            playerMovementY = 0;
+            projectiles = [];
+            deleteProjectiles = [];
+            enemies = [];
+            deleteEnemies = [];
+            x = 0;
+            playerAngle = 0;
+            tickX = 0;
+            tickY = 0;
+            keyW = false;
+            keyA = false;
+            keyS = false;
+            keyD = false;
+            playerMoveAmmount = 0;
+            delay = 0;
+        }
+
+        c.addEventListener("click", async () => {
+            await c.requestPointerLock();
+        });
+
+        document.addEventListener("pointerlockchange", lockChangeAlert, false);
+
+        function lockChangeAlert() {
+            if (document.pointerLockElement === c) {
+                mouseLocked = true;
+            } else {
+                mouseLocked = false;
+            }
+        }
+
+        //#endregion game
+    });
+</script>
